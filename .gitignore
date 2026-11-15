@@ -1,0 +1,12 @@
+qiniu-manager.db
+qiniu-manager.db-shm
+qiniu-manager.db-wal
+var/
+credentials.json
+credentials.json.tmp
+frontend/node_modules/
+wails-template-*/
+build/
+release/
+frontend/dist/
+*.exe

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "cloud-storage-sync-tool",
+  "outputfilename": "../../release/云存储同步工具.exe",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "438907007@qq.com",
+    "email": "438907007@qq.com"
+  }
+}
