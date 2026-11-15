@@ -49,7 +49,9 @@ func NewService(manifestURL string) *Service {
 }
 
 func (s *Service) Check(ctx context.Context, current string) (Result, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.ManifestURL, nil)
+	checkContext, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(checkContext, http.MethodGet, s.ManifestURL, nil)
 	if err != nil {
 		return Result{}, fmt.Errorf("创建更新请求：%w", err)
 	}
