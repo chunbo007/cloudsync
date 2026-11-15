@@ -25,20 +25,21 @@
 - 凭据存储抽象；
 - Windows DPAPI 凭据实现骨架。
 
-## 本地运行
+## 界面截图
 
-如果 Go 已加入 PATH：
+### 映射列表
 
-```powershell
-go run .\cmd\qiniu-manager
-```
+![映射列表](docs/screenshots/mapping-list.png)
 
-如果当前终端没有继承 FlyEnv PATH，可以使用 FlyEnv 的 Go 可执行文件：
+### 添加映射
 
-```powershell
-& 'D:\Program Files\FlyEnv-Data\env\golang\bin\go.exe' run .\cmd\qiniu-manager
-```
+![添加映射](docs/screenshots/add-mapping.png)
 
-数据库默认生成在当前目录的 `qiniu-manager.db`。
+### 编辑账号
 
-桌面版 EXE 请从 GitHub Releases 下载。构建产物使用“云存储同步工具”命名，不将 EXE 和本地配置提交到源码仓库。
+![编辑账号](docs/screenshots/account-edit.png)
+
+### 同步进度
+
+![同步进度](docs/screenshots/sync-progress.png)
+
