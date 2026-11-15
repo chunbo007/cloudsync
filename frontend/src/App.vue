@@ -17,7 +17,7 @@ import {
   SyncMapping,
   TestConnection,
 } from '../wailsjs/go/main/App.js'
-import { EventsOff, EventsOn } from '../wailsjs/runtime/runtime.js'
+import { BrowserOpenURL, EventsOff, EventsOn } from '../wailsjs/runtime/runtime.js'
 
 const accounts = ref([])
 const mappings = ref([])
@@ -49,7 +49,7 @@ const syncMode = ref('overwrite')
 const enableHTMLCache = ref(true)
 const htmlCacheMode = ref('no-cache')
 const customCacheControl = ref('')
-const appVersion = 'v1.0.1'
+const appVersion = 'v1.0.2'
 const githubURL = 'https://github.com/chunbo007/cloudsync'
 const updateInfo = ref(null)
 const updateLoading = ref(false)
@@ -67,6 +67,10 @@ const syncProgress = reactive({
 const syncDetails = ref([])
 const syncResultStatus = ref('running')
 const syncResultError = ref('')
+
+function openGitHub() {
+  BrowserOpenURL(githubURL)
+}
 
 const accountForm = reactive({
   id: 0,
@@ -836,7 +840,7 @@ onUnmounted(() => {
         </div>
         <div class="about-info">
           <div><span>当前版本</span><strong>{{ appVersion }}</strong></div>
-          <div><span>GitHub</span><a :href="githubURL" target="_blank" rel="noreferrer">{{ githubURL }}</a></div>
+          <div><span>GitHub</span><button class="external-link" type="button" @click="openGitHub">{{ githubURL }}</button></div>
         </div>
       </section>
     </div>

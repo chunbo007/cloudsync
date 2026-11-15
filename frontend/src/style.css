@@ -684,13 +684,23 @@ select:focus {
 }
 
 .about-info strong,
-.about-info a {
+.about-info a,
+.external-link {
   color: #2d394b;
   font-size: 14px;
   word-break: break-all;
 }
 
-.about-info a {
+.external-link {
+  padding: 0;
+  border: 0;
+  color: #3568b8;
+  background: transparent;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.external-link:hover {
   color: #3568b8;
 }
 
