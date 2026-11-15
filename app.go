@@ -17,7 +17,7 @@ import (
 	"qiniu-site-manager/internal/updater"
 )
 
-const CurrentVersion = "v1.0.0"
+const CurrentVersion = "v1.0.1"
 
 type App struct {
 	ctx         context.Context

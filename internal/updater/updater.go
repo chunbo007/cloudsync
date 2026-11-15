@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -42,7 +43,7 @@ func NewService(manifestURL string) *Service {
 		manifestURL = DefaultManifestURL
 	}
 	return &Service{
-		Client:      &http.Client{Timeout: 20 * time.Second},
+		Client:      newHTTPClient(),
 		ManifestURL: manifestURL,
 	}
 }
@@ -211,7 +212,20 @@ func (s *Service) client() *http.Client {
 	if s.Client != nil {
 		return s.Client
 	}
-	return &http.Client{Timeout: 20 * time.Second}
+	return newHTTPClient()
+}
+
+func newHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 proxyFromSystemOrEnvironment(),
+			DialContext:           (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 15 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
 }
 
 func verifySHA256(path, expected string) error {
