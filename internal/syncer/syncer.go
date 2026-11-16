@@ -137,12 +137,16 @@ func UploadDirectory(ctx context.Context, client *qiniu.Client, localPath string
 			options.Progress(result.Uploaded, total, key, "uploaded")
 		}
 
-		if options.RefreshCDN && options.CDNDomain != "" {
+		if options.RefreshCDN && options.CDNDomain != "" && (extension == ".html" || extension == ".htm") {
 			url, buildErr := qiniu.BuildURL(options.CDNDomain, key)
 			if buildErr != nil {
 				return buildErr
 			}
 			refreshURLs = append(refreshURLs, url)
+			if strings.EqualFold(key, "index.html") {
+				rootURL := strings.TrimRight(strings.TrimSpace(options.CDNDomain), "/") + "/"
+				refreshURLs = append(refreshURLs, rootURL)
+			}
 		}
 		return nil
 	})

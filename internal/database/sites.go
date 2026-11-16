@@ -16,12 +16,13 @@ type Site struct {
 	AccountName  string `json:"accountName,omitempty"`
 	BucketName   string `json:"bucketName,omitempty"`
 	Private      bool   `json:"private,omitempty"`
+	CDNDomain    string `json:"cdnDomain,omitempty"`
 }
 
 func (db *DB) ListAllSites(ctx context.Context) ([]Site, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file,
-		       a.name, b.name, b.private
+		       a.name, b.name, b.private, COALESCE(b.cdn_domain, '')
 		FROM sites s
 		JOIN buckets b ON b.id = s.bucket_id
 		JOIN accounts a ON a.id = b.account_id
@@ -34,7 +35,7 @@ func (db *DB) ListAllSites(ctx context.Context) ([]Site, error) {
 	result := make([]Site, 0)
 	for rows.Next() {
 		var site Site
-		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile, &site.AccountName, &site.BucketName, &site.Private); err != nil {
+		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile, &site.AccountName, &site.BucketName, &site.Private, &site.CDNDomain); err != nil {
 			return nil, fmt.Errorf("解析全部路径映射：%w", err)
 		}
 		result = append(result, site)

@@ -12,6 +12,7 @@ type Bucket struct {
 	Region    string `json:"region"`
 	Private   bool   `json:"private"`
 	Selected  bool   `json:"selected"`
+	CDNDomain string `json:"cdnDomain"`
 }
 
 func (db *DB) SaveBucketSelections(ctx context.Context, accountID int64, buckets []Bucket) error {
@@ -42,7 +43,7 @@ func (db *DB) SaveBucketSelections(ctx context.Context, accountID int64, buckets
 
 func (db *DB) ListBuckets(ctx context.Context, accountID int64, selectedOnly bool) ([]Bucket, error) {
 	query := `
-		SELECT id, account_id, name, COALESCE(region, 'auto'), private, selected
+		SELECT id, account_id, name, COALESCE(region, 'auto'), private, selected, COALESCE(cdn_domain, '')
 		FROM buckets WHERE account_id = ?`
 	if selectedOnly {
 		query += ` AND selected = 1`
@@ -59,7 +60,7 @@ func (db *DB) ListBuckets(ctx context.Context, accountID int64, selectedOnly boo
 	for rows.Next() {
 		var bucket Bucket
 		var private, selected int
-		if err := rows.Scan(&bucket.ID, &bucket.AccountID, &bucket.Name, &bucket.Region, &private, &selected); err != nil {
+		if err := rows.Scan(&bucket.ID, &bucket.AccountID, &bucket.Name, &bucket.Region, &private, &selected, &bucket.CDNDomain); err != nil {
 			return nil, fmt.Errorf("解析 Bucket：%w", err)
 		}
 		bucket.Selected = selected == 1
@@ -67,6 +68,25 @@ func (db *DB) ListBuckets(ctx context.Context, accountID int64, selectedOnly boo
 		result = append(result, bucket)
 	}
 	return result, rows.Err()
+}
+
+func (db *DB) UpdateBucketCDNDomain(ctx context.Context, accountID int64, bucketName, domain string) error {
+	result, err := db.ExecContext(ctx, `
+		UPDATE buckets
+		SET cdn_domain = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE account_id = ? AND name = ?
+	`, domain, accountID, bucketName)
+	if err != nil {
+		return fmt.Errorf("保存 Bucket CDN 域名：%w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("确认 Bucket CDN 域名保存结果：%w", err)
+	}
+	if count == 0 {
+		return fmt.Errorf("Bucket 不存在")
+	}
+	return nil
 }
 
 func boolToInt(value bool) int {

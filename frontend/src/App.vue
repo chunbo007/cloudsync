@@ -49,7 +49,9 @@ const syncMode = ref('overwrite')
 const enableHTMLCache = ref(true)
 const htmlCacheMode = ref('no-cache')
 const customCacheControl = ref('')
-const appVersion = 'v1.0.1'
+const refreshCDN = ref(false)
+const cdnDomain = ref('')
+const appVersion = 'v1.0.2'
 const githubURL = 'https://github.com/chunbo007/cloudsync'
 const updateInfo = ref(null)
 const updateLoading = ref(false)
@@ -67,6 +69,7 @@ const syncProgress = reactive({
 const syncDetails = ref([])
 const syncResultStatus = ref('running')
 const syncResultError = ref('')
+const refreshedURLs = ref(0)
 
 function openGitHub() {
   BrowserOpenURL(githubURL)
@@ -420,6 +423,8 @@ function syncMapping(mapping) {
   enableHTMLCache.value = true
   htmlCacheMode.value = 'no-cache'
   customCacheControl.value = ''
+  cdnDomain.value = mapping.cdnDomain || ''
+  refreshCDN.value = Boolean(cdnDomain.value)
   showSyncModal.value = true
 }
 
@@ -469,6 +474,7 @@ async function confirmSync() {
   showProgressDetails.value = false
   syncResultStatus.value = 'running'
   syncResultError.value = ''
+  refreshedURLs.value = 0
   showProgressModal.value = true
   loading.value = true
   clearMessage()
@@ -477,9 +483,13 @@ async function confirmSync() {
       clearRemote: syncMode.value === 'clear',
       overwrite: true,
       htmlCacheControl: cacheControlValue.value,
+      refreshCDN: refreshCDN.value && Boolean(cdnDomain.value.trim()),
+      cdnDomain: cdnDomain.value.trim(),
     })
     syncResultStatus.value = 'success'
     syncProgress.status = 'success'
+    refreshedURLs.value = result.refreshedUrls || 0
+    mapping.cdnDomain = cdnDomain.value.trim()
   } catch (err) {
     syncResultStatus.value = 'error'
     syncProgress.status = 'error'
@@ -528,8 +538,9 @@ onUnmounted(() => {
 
     <section class="workspace panel">
       <div v-if="!mappings.length" class="empty-state">
-        <strong>还没有映射</strong>
-        <span>点击右上角“添加映射”开始配置。</span>
+        <div class="empty-state-mark">＋</div>
+        <strong>还没有同步映射</strong>
+        <span>请点击左上角“添加映射”开始配置。</span>
       </div>
       <div v-for="mapping in mappings" :key="mapping.id" class="mapping-row">
         <div class="mapping-name">
@@ -566,11 +577,16 @@ onUnmounted(() => {
         <div class="modal-heading">
           <div>
             <h2>账号管理</h2>
-            <p>SecretKey 只保存在本机加密凭据中。</p>
+            <p>SecretKey 只保存在本机加密凭据中</p>
           </div>
           <button class="link-button" type="button" @click="showAccountModal = false">关闭</button>
         </div>
         <div class="account-manager-list">
+          <div v-if="!accounts.length" class="manager-empty">
+            <div class="manager-empty-mark">＋</div>
+            <strong>还没有账号配置</strong>
+            <p>先新建一个云平台账号，再添加 Bucket 和同步映射。</p>
+          </div>
           <div v-for="account in accounts" :key="account.id" class="manager-row">
             <div>
               <strong>{{ account.name }}</strong>
@@ -750,6 +766,17 @@ onUnmounted(() => {
             <input v-model="customCacheControl" placeholder="例如：public, max-age=600" />
           </label>
         </div>
+        <label class="check-row">
+          <input v-model="refreshCDN" type="checkbox" />
+          上传 HTML、HTM 后刷新 CDN 缓存
+        </label>
+        <div v-if="refreshCDN" class="cdn-refresh-box">
+          <label>
+            CDN 域名
+            <input v-model="cdnDomain" placeholder="例如：https://cdn.example.com" />
+          </label>
+          <p>域名会按 Bucket 保存，后续同步可直接使用。</p>
+        </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" @click="showSyncModal = false">取消</button>
           <button class="primary-button" type="button" :disabled="loading" @click="confirmSync">开始同步</button>
@@ -773,7 +800,9 @@ onUnmounted(() => {
           <span>{{ syncProgress.uploaded }} / {{ syncProgress.total }} 个文件</span>
           <span>{{ syncProgress.current || '准备上传…' }}</span>
         </div>
-        <p v-if="syncResultStatus === 'success'" class="progress-result success-text">已成功上传 {{ syncProgress.uploaded }} 个文件。</p>
+        <p v-if="syncResultStatus === 'success'" class="progress-result success-text">
+          已成功上传 {{ syncProgress.uploaded }} 个文件。<span v-if="refreshedURLs">已刷新 CDN {{ refreshedURLs }} 个地址。</span>
+        </p>
         <p v-if="syncResultStatus === 'error'" class="progress-result error-text">{{ syncResultError }}</p>
         <div v-if="showProgressDetails" class="progress-details">
           <div v-for="detail in syncDetails" :key="detail.path" class="progress-detail-row">

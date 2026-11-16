@@ -37,6 +37,7 @@ export namespace database {
 	    region: string;
 	    private: boolean;
 	    selected: boolean;
+	    cdnDomain: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Bucket(source);
@@ -50,6 +51,7 @@ export namespace database {
 	        this.region = source["region"];
 	        this.private = source["private"];
 	        this.selected = source["selected"];
+	        this.cdnDomain = source["cdnDomain"];
 	    }
 	}
 	export class Site {
@@ -63,6 +65,7 @@ export namespace database {
 	    accountName?: string;
 	    bucketName?: string;
 	    private?: boolean;
+	    cdnDomain?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Site(source);
@@ -80,6 +83,7 @@ export namespace database {
 	        this.accountName = source["accountName"];
 	        this.bucketName = source["bucketName"];
 	        this.private = source["private"];
+	        this.cdnDomain = source["cdnDomain"];
 	    }
 	}
 
@@ -161,6 +165,8 @@ export namespace main {
 	    clearRemote: boolean;
 	    overwrite: boolean;
 	    htmlCacheControl: string;
+	    refreshCDN: boolean;
+	    cdnDomain: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SyncMappingInput(source);
@@ -171,6 +177,8 @@ export namespace main {
 	        this.clearRemote = source["clearRemote"];
 	        this.overwrite = source["overwrite"];
 	        this.htmlCacheControl = source["htmlCacheControl"];
+	        this.refreshCDN = source["refreshCDN"];
+	        this.cdnDomain = source["cdnDomain"];
 	    }
 	}
 

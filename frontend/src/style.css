@@ -297,9 +297,39 @@ select:focus {
 }
 
 .empty-state {
-  padding: 42px 10px 26px;
-  color: #8a94a3;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 168px;
+  padding: 34px 10px;
+  color: #7a8595;
   text-align: center;
+  font-size: 13px;
+}
+
+.empty-state-mark,
+.manager-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #c8d7ea;
+  border-radius: 50%;
+  color: #3568b8;
+  background: #f1f6fc;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.empty-state strong,
+.manager-empty strong {
+  color: #3d4c61;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.empty-state span {
+  color: #8a94a3;
   font-size: 13px;
 }
 
@@ -665,6 +695,22 @@ select:focus {
   line-height: 1.6;
 }
 
+.cdn-refresh-box {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 4px;
+  background: #f7f9fc;
+}
+
+.cdn-refresh-box p {
+  margin: 0;
+  color: #7a8595;
+  font-size: 12px;
+}
+
 .about-info {
   display: grid;
   gap: 14px;
@@ -756,6 +802,10 @@ select:focus {
 
 .sync-modal {
   width: min(560px, 100%);
+}
+
+.sync-modal .form-actions {
+  margin-top: 24px;
 }
 
 .progress-backdrop {
@@ -977,9 +1027,37 @@ select:focus {
 }
 
 .account-manager-list {
-  max-height: 190px;
+  max-height: 220px;
   margin-top: 18px;
   overflow: auto;
+}
+
+.account-modal .modal-heading p {
+  margin-bottom: 0;
+  color: #9aa4b1;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.manager-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 126px;
+  padding: 18px 12px;
+  border: 1px dashed #d6dee8;
+  border-radius: 4px;
+  background: #fafbfd;
+  text-align: center;
+}
+
+.manager-empty p {
+  max-width: none;
+  margin: 0;
+  color: #8a94a3;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
 }
 
 .manager-row {

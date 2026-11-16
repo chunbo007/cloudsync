@@ -17,7 +17,7 @@ import (
 	"qiniu-site-manager/internal/updater"
 )
 
-const CurrentVersion = "v1.0.1"
+const CurrentVersion = "v1.0.2"
 
 type App struct {
 	ctx         context.Context
@@ -57,6 +57,8 @@ type SyncMappingInput struct {
 	ClearRemote      bool   `json:"clearRemote"`
 	Overwrite        bool   `json:"overwrite"`
 	HTMLCacheControl string `json:"htmlCacheControl"`
+	RefreshCDN       bool   `json:"refreshCDN"`
+	CDNDomain        string `json:"cdnDomain"`
 }
 
 type SyncProgress struct {
@@ -364,9 +366,11 @@ func (a *App) SyncMapping(mappingID int64, input SyncMappingInput) (syncer.Resul
 		return syncer.Result{}, err
 	}
 	var bucketName string
+	var bucketCDNDomain string
 	for _, bucket := range buckets {
 		if bucket.ID == site.BucketID {
 			bucketName = bucket.Name
+			bucketCDNDomain = bucket.CDNDomain
 		}
 	}
 	if bucketName == "" {
@@ -383,11 +387,21 @@ func (a *App) SyncMapping(mappingID int64, input SyncMappingInput) (syncer.Resul
 	if err != nil {
 		return syncer.Result{}, err
 	}
+	cdnDomain := strings.TrimRight(strings.TrimSpace(input.CDNDomain), "/")
+	if cdnDomain == "" {
+		cdnDomain = strings.TrimRight(strings.TrimSpace(bucketCDNDomain), "/")
+	} else if cdnDomain != bucketCDNDomain {
+		if err := a.db.UpdateBucketCDNDomain(a.context(), site.AccountID, bucketName, cdnDomain); err != nil {
+			return syncer.Result{}, err
+		}
+	}
 	return syncer.UploadDirectory(a.context(), client, site.LocalPath, syncer.Options{
 		ClearRemote:      input.ClearRemote,
 		Overwrite:        input.Overwrite,
 		RemotePrefix:     site.RemotePrefix,
 		HTMLCacheControl: input.HTMLCacheControl,
+		RefreshCDN:       input.RefreshCDN && cdnDomain != "",
+		CDNDomain:        cdnDomain,
 		Progress: func(uploaded, total int, current, status string) {
 			runtime.EventsEmit(a.context(), "sync-progress", SyncProgress{
 				MappingID: mappingID,

@@ -351,13 +351,24 @@ func (c *Client) RefreshURLs(urls []string) error {
 	if len(urls) == 0 {
 		return nil
 	}
-	for start := 0; start < len(urls); start += 1000 {
-		end := start + 1000
+	for start := 0; start < len(urls); start += 100 {
+		end := start + 100
 		if end > len(urls) {
 			end = len(urls)
 		}
-		if _, err := c.cdnManager.RefreshUrls(urls[start:end]); err != nil {
+		batch := urls[start:end]
+		response, err := c.cdnManager.RefreshUrls(batch)
+		if err != nil {
 			return fmt.Errorf("刷新 CDN：%w", err)
+		}
+		if response.Code != 200 {
+			if response.Error != "" {
+				return fmt.Errorf("刷新 CDN：%s（错误码 %d）", response.Error, response.Code)
+			}
+			return fmt.Errorf("刷新 CDN 失败（错误码 %d）", response.Code)
+		}
+		if len(response.InvalidUrls) > 0 {
+			return fmt.Errorf("刷新 CDN：存在无效地址：%s", strings.Join(response.InvalidUrls, ", "))
 		}
 	}
 	return nil
