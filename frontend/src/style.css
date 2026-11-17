@@ -22,6 +22,23 @@ select {
   font: inherit;
 }
 
+textarea {
+  width: 100%;
+  min-height: 74px;
+  padding: 9px 10px;
+  border: 1px solid #d5dce6;
+  border-radius: 6px;
+  color: #202938;
+  background: #fff;
+  outline: none;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: #6d94ce;
+  box-shadow: 0 0 0 2px rgb(53 104 184 / 12%);
+}
+
 button {
   cursor: pointer;
 }
@@ -711,6 +728,26 @@ select:focus {
   font-size: 12px;
 }
 
+.build-sync-box {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #dbe4ef;
+  border-radius: 4px;
+  background: #f7f9fc;
+}
+
+.build-sync-box .check-row {
+  margin-top: 0;
+}
+
+.build-sync-box p {
+  margin: 8px 0 0;
+  color: #7a8595;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
 .about-info {
   display: grid;
   gap: 14px;
@@ -756,6 +793,8 @@ select:focus {
 
 .mapping-modal {
   width: min(600px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 .remote-folder-backdrop {
@@ -802,10 +841,22 @@ select:focus {
 
 .sync-modal {
   width: min(560px, 100%);
+  height: min(680px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .sync-modal .form-actions {
+  flex: 0 0 auto;
   margin-top: 24px;
+}
+
+.sync-modal-body {
+  min-height: 0;
+  flex: 1;
+  padding-right: 4px;
+  overflow-y: auto;
 }
 
 .progress-backdrop {
@@ -814,6 +865,10 @@ select:focus {
 
 .progress-modal {
   width: min(560px, 100%);
+  height: min(560px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .progress-percent {
@@ -874,7 +929,8 @@ select:focus {
 }
 
 .progress-details {
-  max-height: 220px;
+  min-height: 0;
+  flex: 1;
   margin-top: 18px;
   overflow: auto;
   border: 1px solid #d9e0e8;

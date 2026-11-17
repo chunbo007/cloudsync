@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import {
+  BuildMapping,
   ChooseDirectory,
   CheckForUpdate,
   DeleteAccount,
@@ -12,6 +13,7 @@ import {
   ListBucketFolders,
   OpenLocalDirectory,
   SaveAccount,
+  SaveBuildBeforeSync,
   SaveBucketSelections,
   SaveMapping,
   SyncMapping,
@@ -51,7 +53,8 @@ const htmlCacheMode = ref('no-cache')
 const customCacheControl = ref('')
 const refreshCDN = ref(false)
 const cdnDomain = ref('')
-const appVersion = 'v1.0.2'
+const buildBeforeSync = ref(false)
+const appVersion = 'v1.0.3'
 const githubURL = 'https://github.com/chunbo007/cloudsync'
 const updateInfo = ref(null)
 const updateLoading = ref(false)
@@ -88,6 +91,8 @@ const mappingForm = reactive({
   name: '',
   localPath: '',
   remotePrefix: '',
+  buildCommand: '',
+  buildWorkdir: '',
 })
 
 const deletingBucketName = computed(() => deletingBucket.value?.bucket || '')
@@ -177,6 +182,8 @@ function resetMappingForm() {
     name: '',
     localPath: '',
     remotePrefix: '',
+    buildCommand: '',
+    buildWorkdir: '',
   })
   editingMapping.value = null
   mappingAccountID.value = accounts.value[0]?.id || 0
@@ -305,6 +312,8 @@ async function editMapping(mapping) {
     name: mapping.name,
     localPath: mapping.localPath,
     remotePrefix: mapping.remotePrefix,
+    buildCommand: mapping.buildCommand || '',
+    buildWorkdir: mapping.buildWorkdir || '',
   })
   mappingAccountID.value = mapping.accountId
   mappingBucketName.value = mapping.bucketName
@@ -317,6 +326,13 @@ async function chooseLocalPath() {
   const path = await ChooseDirectory()
   if (path) {
     mappingForm.localPath = path
+  }
+}
+
+async function chooseBuildWorkdir() {
+  const path = await ChooseDirectory()
+  if (path) {
+    mappingForm.buildWorkdir = path
   }
 }
 
@@ -420,12 +436,30 @@ async function confirmDeleteBucket() {
 function syncMapping(mapping) {
   syncingMapping.value = mapping
   syncMode.value = 'overwrite'
+  buildBeforeSync.value = Boolean(mapping.buildBeforeSync)
   enableHTMLCache.value = true
   htmlCacheMode.value = 'no-cache'
   customCacheControl.value = ''
   cdnDomain.value = mapping.cdnDomain || ''
   refreshCDN.value = Boolean(cdnDomain.value)
   showSyncModal.value = true
+}
+
+function prepareProgress(mapping, status) {
+  Object.assign(syncProgress, {
+    mappingID: mapping.id,
+    uploaded: 0,
+    total: 0,
+    current: '',
+    status,
+  })
+  syncDetails.value = []
+  showProgressDetails.value = true
+  syncResultStatus.value = status
+  syncResultError.value = ''
+  refreshedURLs.value = 0
+  showProgressModal.value = true
+  loading.value = true
 }
 
 function handleSyncProgress(progress) {
@@ -448,36 +482,55 @@ function handleSyncProgress(progress) {
   }
 }
 
+function handleBuildProgress(progress) {
+  if (!progress || progress.mappingId !== syncingMapping.value?.id) {
+    return
+  }
+  const path = `[构建] ${progress.current}`
+  syncProgress.current = progress.current
+  const status = progress.status === 'error'
+    ? '失败'
+    : progress.status === 'success'
+      ? '已完成'
+      : progress.status === 'building'
+        ? '执行中'
+        : '日志'
+  const existing = syncDetails.value.find((item) => item.path === path)
+  if (existing) {
+    existing.status = status
+  } else {
+    syncDetails.value.push({
+      path,
+      status,
+    })
+  }
+}
+
+async function saveBuildPreference() {
+  if (!syncingMapping.value) {
+    return
+  }
+  try {
+    await SaveBuildBeforeSync(syncingMapping.value.id, buildBeforeSync.value)
+    syncingMapping.value.buildBeforeSync = buildBeforeSync.value
+  } catch (err) {
+    updateError.value = String(err)
+  }
+}
+
 function closeProgressModal() {
   showProgressModal.value = false
   syncingMapping.value = null
 }
 
-async function confirmSync() {
+async function runSync() {
   if (!syncingMapping.value) {
     return
   }
-  if (enableHTMLCache.value && !cacheControlValue.value) {
-    error.value = '请输入 Cache-Control 值'
-    return
-  }
   const mapping = syncingMapping.value
-  showSyncModal.value = false
-  Object.assign(syncProgress, {
-    mappingID: mapping.id,
-    uploaded: 0,
-    total: 0,
-    current: '',
-    status: 'running',
-  })
-  syncDetails.value = []
-  showProgressDetails.value = false
   syncResultStatus.value = 'running'
-  syncResultError.value = ''
-  refreshedURLs.value = 0
-  showProgressModal.value = true
-  loading.value = true
-  clearMessage()
+  syncProgress.status = 'running'
+  syncResultStatus.value = 'running'
   try {
     const result = await SyncMapping(mapping.id, {
       clearRemote: syncMode.value === 'clear',
@@ -499,6 +552,50 @@ async function confirmSync() {
   }
 }
 
+async function buildMappingOnly() {
+  if (!syncingMapping.value) {
+    return
+  }
+  showSyncModal.value = false
+  prepareProgress(syncingMapping.value, 'building')
+  clearMessage()
+  try {
+    await BuildMapping(syncingMapping.value.id)
+    syncResultStatus.value = 'build-success'
+    syncProgress.status = 'build-success'
+  } catch (err) {
+    syncResultStatus.value = 'error'
+    syncProgress.status = 'error'
+    syncResultError.value = String(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function confirmSync() {
+  if (!syncingMapping.value) {
+    return
+  }
+  if (enableHTMLCache.value && !cacheControlValue.value) {
+    error.value = '请输入 Cache-Control 值'
+    return
+  }
+  showSyncModal.value = false
+  prepareProgress(syncingMapping.value, buildBeforeSync.value ? 'building' : 'running')
+  clearMessage()
+  try {
+    if (buildBeforeSync.value) {
+      await BuildMapping(syncingMapping.value.id)
+    }
+    await runSync()
+  } catch (err) {
+    syncResultStatus.value = 'error'
+    syncProgress.status = 'error'
+    syncResultError.value = String(err)
+    loading.value = false
+  }
+}
+
 async function openLocalDirectory(path) {
   clearMessage()
   try {
@@ -509,7 +606,9 @@ async function openLocalDirectory(path) {
 }
 
 onMounted(async () => {
+  document.title = `云存储同步工具 ${appVersion}`
   EventsOn('sync-progress', handleSyncProgress)
+  EventsOn('build-progress', handleBuildProgress)
   try {
     await refreshAccounts()
     await refreshMappings()
@@ -521,6 +620,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   EventsOff('sync-progress')
+  EventsOff('build-progress')
 })
 </script>
 
@@ -689,6 +789,17 @@ onUnmounted(() => {
               <button class="secondary-button" type="button" :disabled="!mappingBucketName" @click="chooseRemotePath">选择</button>
             </div>
           </label>
+          <label>
+            构建命令
+            <textarea v-model="mappingForm.buildCommand" rows="3" placeholder="例如：npm run build:h5"></textarea>
+          </label>
+          <label>
+            构建执行目录（可选）
+            <div class="path-input">
+              <input v-model="mappingForm.buildWorkdir" readonly placeholder="不填则使用程序当前目录" />
+              <button class="secondary-button" type="button" @click="chooseBuildWorkdir">选择</button>
+            </div>
+          </label>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" @click="showMappingModal = false">取消</button>
@@ -732,7 +843,8 @@ onUnmounted(() => {
           </div>
           <button class="link-button" type="button" @click="showSyncModal = false">关闭</button>
         </div>
-        <div class="sync-options">
+        <div class="sync-modal-body">
+          <div class="sync-options">
           <label class="sync-option" :class="{ selected: syncMode === 'overwrite' }">
             <input v-model="syncMode" type="radio" value="overwrite" />
             <span>
@@ -747,9 +859,9 @@ onUnmounted(() => {
               <small>先清空当前远程目录，再上传本地文件。</small>
             </span>
           </label>
-        </div>
-        <label class="check-row"><input v-model="enableHTMLCache" type="checkbox" />为 HTML、HTM 文件设置 Cache-Control</label>
-        <div v-if="enableHTMLCache" class="cache-control-box">
+          </div>
+          <label class="check-row"><input v-model="enableHTMLCache" type="checkbox" />为 HTML、HTM 文件设置 Cache-Control</label>
+          <div v-if="enableHTMLCache" class="cache-control-box">
           <label>
             Cache-Control 值
             <select v-model="htmlCacheMode">
@@ -765,21 +877,33 @@ onUnmounted(() => {
             自定义值
             <input v-model="customCacheControl" placeholder="例如：public, max-age=600" />
           </label>
-        </div>
-        <label class="check-row">
-          <input v-model="refreshCDN" type="checkbox" />
-          上传 HTML、HTM 后刷新 CDN 缓存
-        </label>
-        <div v-if="refreshCDN" class="cdn-refresh-box">
+          </div>
+          <label class="check-row">
+            <input v-model="refreshCDN" type="checkbox" />
+            上传 HTML、HTM 后刷新 CDN 缓存
+          </label>
+          <div v-if="refreshCDN" class="cdn-refresh-box">
           <label>
             CDN 域名
             <input v-model="cdnDomain" placeholder="例如：https://cdn.example.com" />
           </label>
           <p>域名会按 Bucket 保存，后续同步可直接使用。</p>
+          </div>
+          <div class="build-sync-box">
+          <label class="check-row">
+            <input v-model="buildBeforeSync" type="checkbox" @change="saveBuildPreference" />同步前执行构建
+          </label>
+          <p v-if="syncingMapping?.buildCommand">
+            构建命令：{{ syncingMapping.buildCommand }}<br />
+            执行目录：{{ syncingMapping.buildWorkdir }}
+          </p>
+          <p v-else>尚未配置构建命令，请先编辑映射。</p>
+          </div>
         </div>
         <div class="form-actions">
           <button class="secondary-button" type="button" @click="showSyncModal = false">取消</button>
-          <button class="primary-button" type="button" :disabled="loading" @click="confirmSync">开始同步</button>
+          <button class="secondary-button" type="button" :disabled="loading" @click="buildMappingOnly">构建</button>
+          <button class="primary-button" type="button" :disabled="loading" @click="confirmSync">同步</button>
         </div>
       </section>
     </div>
@@ -788,23 +912,26 @@ onUnmounted(() => {
       <section class="modal panel progress-modal">
         <div class="modal-heading">
           <div>
-            <h2>{{ syncResultStatus === 'running' ? '正在同步' : syncResultStatus === 'success' ? '同步完成' : '同步失败' }}</h2>
+            <h2>
+              {{ syncResultStatus === 'building' ? '正在构建' : syncResultStatus === 'running' ? '正在同步' : syncResultStatus === 'build-success' ? '构建完成' : syncResultStatus === 'success' ? '同步完成' : '同步失败' }}
+            </h2>
             <p>{{ syncingMapping?.name }} · {{ syncingMapping?.bucketName }}</p>
           </div>
           <span v-if="syncResultStatus === 'running'" class="progress-percent">{{ syncProgressPercent }}%</span>
         </div>
-        <div class="progress-track">
+        <div v-if="syncResultStatus === 'running' || syncResultStatus === 'success'" class="progress-track">
           <div class="progress-value" :style="{ width: `${syncProgressPercent}%` }"></div>
         </div>
-        <div class="progress-summary">
+        <div v-if="syncResultStatus === 'running' || syncResultStatus === 'success'" class="progress-summary">
           <span>{{ syncProgress.uploaded }} / {{ syncProgress.total }} 个文件</span>
           <span>{{ syncProgress.current || '准备上传…' }}</span>
         </div>
         <p v-if="syncResultStatus === 'success'" class="progress-result success-text">
           已成功上传 {{ syncProgress.uploaded }} 个文件。<span v-if="refreshedURLs">已刷新 CDN {{ refreshedURLs }} 个地址。</span>
         </p>
+        <p v-if="syncResultStatus === 'build-success'" class="progress-result success-text">构建已完成，尚未执行同步。</p>
         <p v-if="syncResultStatus === 'error'" class="progress-result error-text">{{ syncResultError }}</p>
-        <div v-if="showProgressDetails" class="progress-details">
+        <div class="progress-details">
           <div v-for="detail in syncDetails" :key="detail.path" class="progress-detail-row">
             <span :title="detail.path">{{ detail.path }}</span>
             <small :class="{ done: detail.status === '已完成' }">{{ detail.status }}</small>
@@ -813,9 +940,6 @@ onUnmounted(() => {
         </div>
         <p v-if="syncResultStatus === 'running'" class="progress-tip">同步过程中请不要关闭软件。</p>
         <div class="progress-actions">
-          <button class="secondary-button" type="button" @click="showProgressDetails = !showProgressDetails">
-            {{ showProgressDetails ? '收起详情' : '展开详情' }}
-          </button>
           <button v-if="syncResultStatus !== 'running'" class="primary-button" type="button" @click="closeProgressModal">关闭</button>
         </div>
       </section>

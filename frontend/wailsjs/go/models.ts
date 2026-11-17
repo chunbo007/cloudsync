@@ -66,6 +66,9 @@ export namespace database {
 	    bucketName?: string;
 	    private?: boolean;
 	    cdnDomain?: string;
+	    buildCommand?: string;
+	    buildWorkdir?: string;
+	    buildBeforeSync: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Site(source);
@@ -84,6 +87,9 @@ export namespace database {
 	        this.bucketName = source["bucketName"];
 	        this.private = source["private"];
 	        this.cdnDomain = source["cdnDomain"];
+	        this.buildCommand = source["buildCommand"];
+	        this.buildWorkdir = source["buildWorkdir"];
+	        this.buildBeforeSync = source["buildBeforeSync"];
 	    }
 	}
 
@@ -148,6 +154,8 @@ export namespace main {
 	    name: string;
 	    localPath: string;
 	    remotePrefix: string;
+	    buildCommand: string;
+	    buildWorkdir: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MappingInput(source);
@@ -159,6 +167,8 @@ export namespace main {
 	        this.name = source["name"];
 	        this.localPath = source["localPath"];
 	        this.remotePrefix = source["remotePrefix"];
+	        this.buildCommand = source["buildCommand"];
+	        this.buildWorkdir = source["buildWorkdir"];
 	    }
 	}
 	export class SyncMappingInput {

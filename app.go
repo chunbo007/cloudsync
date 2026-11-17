@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -17,7 +19,9 @@ import (
 	"qiniu-site-manager/internal/updater"
 )
 
-const CurrentVersion = "v1.0.2"
+const CurrentVersion = "v1.0.3"
+
+var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
 type App struct {
 	ctx         context.Context
@@ -45,6 +49,8 @@ type MappingInput struct {
 	Name         string `json:"name"`
 	LocalPath    string `json:"localPath"`
 	RemotePrefix string `json:"remotePrefix"`
+	BuildCommand string `json:"buildCommand"`
+	BuildWorkdir string `json:"buildWorkdir"`
 }
 
 type DeleteBucketInput struct {
@@ -65,6 +71,12 @@ type SyncProgress struct {
 	MappingID int64  `json:"mappingId"`
 	Uploaded  int    `json:"uploaded"`
 	Total     int    `json:"total"`
+	Current   string `json:"current"`
+	Status    string `json:"status"`
+}
+
+type BuildProgress struct {
+	MappingID int64  `json:"mappingId"`
 	Current   string `json:"current"`
 	Status    string `json:"status"`
 }
@@ -330,15 +342,98 @@ func (a *App) SaveMapping(accountID int64, bucketName string, input MappingInput
 	}
 	remotePrefix := strings.Trim(strings.TrimSpace(input.RemotePrefix), "/")
 	if input.ID > 0 {
-		return a.db.UpdateSite(a.context(), input.ID, input.Name, input.LocalPath, remotePrefixWithSlash(remotePrefix))
+		_, err := a.db.GetSite(a.context(), input.ID)
+		if err != nil {
+			return err
+		}
+		return a.db.UpdateSiteWithBuild(a.context(), input.ID, input.Name, input.LocalPath, remotePrefixWithSlash(remotePrefix), strings.TrimSpace(input.BuildCommand), strings.TrimSpace(input.BuildWorkdir))
 	}
 	_, err := a.db.SaveSiteForBucket(a.context(), accountID, bucketName, database.Site{
 		Name:         input.Name,
 		RemotePrefix: remotePrefixWithSlash(remotePrefix),
 		LocalPath:    input.LocalPath,
 		VersionFile:  "",
+		BuildCommand: strings.TrimSpace(input.BuildCommand),
+		BuildWorkdir: strings.TrimSpace(input.BuildWorkdir),
 	})
 	return err
+}
+
+func (a *App) BuildMapping(mappingID int64) error {
+	site, err := a.db.GetSite(a.context(), mappingID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(site.BuildCommand) == "" {
+		return fmt.Errorf("尚未配置构建命令，请先编辑映射")
+	}
+	workdir := strings.TrimSpace(site.BuildWorkdir)
+	if workdir != "" {
+		info, err := os.Stat(workdir)
+		if err != nil || !info.IsDir() {
+			return fmt.Errorf("构建执行目录不可用：%s", workdir)
+		}
+	}
+
+	a.emitBuildProgress(mappingID, "开始执行："+site.BuildCommand, "building")
+	command := exec.CommandContext(
+		a.context(),
+		"powershell.exe",
+		"-NoProfile",
+		"-ExecutionPolicy",
+		"Bypass",
+		"-Command",
+		site.BuildCommand,
+	)
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if workdir != "" {
+		command.Dir = workdir
+	}
+	pipe, err := command.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("启动构建输出：%w", err)
+	}
+	command.Stderr = command.Stdout
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("启动构建命令：%w", err)
+	}
+	buffer := make([]byte, 4096)
+	for {
+		count, readErr := pipe.Read(buffer)
+		if count > 0 {
+			text := cleanBuildOutput(string(buffer[:count]))
+			if text != "" {
+				a.emitBuildProgress(mappingID, text, "output")
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	if err := command.Wait(); err != nil {
+		a.emitBuildProgress(mappingID, err.Error(), "error")
+		return fmt.Errorf("构建失败：%w", err)
+	}
+	a.emitBuildProgress(mappingID, "构建完成", "success")
+	return nil
+}
+
+func (a *App) SaveBuildBeforeSync(mappingID int64, enabled bool) error {
+	return a.db.UpdateBuildBeforeSync(a.context(), mappingID, enabled)
+}
+
+func cleanBuildOutput(value string) string {
+	value = ansiEscapePattern.ReplaceAllString(value, "")
+	value = strings.ReplaceAll(value, "\r", "")
+	return strings.TrimSpace(value)
+}
+
+func (a *App) emitBuildProgress(mappingID int64, current, status string) {
+	runtime.EventsEmit(a.context(), "build-progress", BuildProgress{
+		MappingID: mappingID,
+		Current:   current,
+		Status:    status,
+	})
 }
 
 func remotePrefixWithSlash(prefix string) string {

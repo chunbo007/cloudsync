@@ -19,7 +19,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:  "云存储同步工具",
+		Title:  "云存储同步工具 " + CurrentVersion,
 		Width:  1180,
 		Height: 760,
 		AssetServer: &assetserver.Options{

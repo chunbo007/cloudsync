@@ -124,6 +124,12 @@ func (db *DB) Migrate(ctx context.Context) error {
 	if err := ensureBucketCDNColumn(ctx, tx); err != nil {
 		return err
 	}
+	if err := ensureSiteBuildColumns(ctx, tx); err != nil {
+		return err
+	}
+	if err := ensureSiteBuildPreferenceColumn(ctx, tx); err != nil {
+		return err
+	}
 	if err := ensureBucketSelectedColumn(ctx, tx); err != nil {
 		return err
 	}
@@ -139,6 +145,70 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return fmt.Errorf("提交数据库迁移：%w", err)
 	}
 
+	return nil
+}
+
+func ensureSiteBuildPreferenceColumn(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(sites)`)
+	if err != nil {
+		return fmt.Errorf("读取 sites 表结构：%w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("解析 sites 表结构：%w", err)
+		}
+		if name == "build_before_sync" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("读取 sites 表结构结果：%w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE sites ADD COLUMN build_before_sync INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("添加同步前构建字段：%w", err)
+	}
+	return nil
+}
+
+func ensureSiteBuildColumns(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `PRAGMA table_info(sites)`)
+	if err != nil {
+		return fmt.Errorf("读取 sites 表结构：%w", err)
+	}
+	defer rows.Close()
+
+	found := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("解析 sites 表结构：%w", err)
+		}
+		if name == "build_command" || name == "build_workdir" {
+			found[name] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("读取 sites 表结构结果：%w", err)
+	}
+	if !found["build_command"] {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE sites ADD COLUMN build_command TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("添加构建命令字段：%w", err)
+		}
+	}
+	if !found["build_workdir"] {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE sites ADD COLUMN build_workdir TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("添加构建执行目录字段：%w", err)
+		}
+	}
 	return nil
 }
 

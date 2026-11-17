@@ -6,22 +6,26 @@ import (
 )
 
 type Site struct {
-	ID           int64  `json:"id"`
-	AccountID    int64  `json:"accountId"`
-	BucketID     int64  `json:"bucketId"`
-	Name         string `json:"name"`
-	RemotePrefix string `json:"remotePrefix"`
-	LocalPath    string `json:"localPath"`
-	VersionFile  string `json:"versionFile"`
-	AccountName  string `json:"accountName,omitempty"`
-	BucketName   string `json:"bucketName,omitempty"`
-	Private      bool   `json:"private,omitempty"`
-	CDNDomain    string `json:"cdnDomain,omitempty"`
+	ID              int64  `json:"id"`
+	AccountID       int64  `json:"accountId"`
+	BucketID        int64  `json:"bucketId"`
+	Name            string `json:"name"`
+	RemotePrefix    string `json:"remotePrefix"`
+	LocalPath       string `json:"localPath"`
+	VersionFile     string `json:"versionFile"`
+	AccountName     string `json:"accountName,omitempty"`
+	BucketName      string `json:"bucketName,omitempty"`
+	Private         bool   `json:"private,omitempty"`
+	CDNDomain       string `json:"cdnDomain,omitempty"`
+	BuildCommand    string `json:"buildCommand,omitempty"`
+	BuildWorkdir    string `json:"buildWorkdir,omitempty"`
+	BuildBeforeSync bool   `json:"buildBeforeSync"`
 }
 
 func (db *DB) ListAllSites(ctx context.Context) ([]Site, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file,
+		       s.build_command, s.build_workdir, s.build_before_sync,
 		       a.name, b.name, b.private, COALESCE(b.cdn_domain, '')
 		FROM sites s
 		JOIN buckets b ON b.id = s.bucket_id
@@ -35,9 +39,11 @@ func (db *DB) ListAllSites(ctx context.Context) ([]Site, error) {
 	result := make([]Site, 0)
 	for rows.Next() {
 		var site Site
-		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile, &site.AccountName, &site.BucketName, &site.Private, &site.CDNDomain); err != nil {
+		var buildBeforeSync int
+		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile, &site.BuildCommand, &site.BuildWorkdir, &buildBeforeSync, &site.AccountName, &site.BucketName, &site.Private, &site.CDNDomain); err != nil {
 			return nil, fmt.Errorf("解析全部路径映射：%w", err)
 		}
+		site.BuildBeforeSync = buildBeforeSync == 1
 		result = append(result, site)
 	}
 	if err := rows.Err(); err != nil {
@@ -61,15 +67,18 @@ func (db *DB) SaveSite(ctx context.Context, site Site) (int64, error) {
 
 	var siteID int64
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO sites(bucket_id, name, remote_prefix, local_path, version_file)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO sites(bucket_id, name, remote_prefix, local_path, version_file, build_command, build_workdir, build_before_sync)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(bucket_id, name) DO UPDATE SET
 			remote_prefix = excluded.remote_prefix,
 			local_path = excluded.local_path,
 			version_file = excluded.version_file,
+			build_command = excluded.build_command,
+			build_workdir = excluded.build_workdir,
+			build_before_sync = excluded.build_before_sync,
 			updated_at = CURRENT_TIMESTAMP
 		RETURNING id
-	`, bucketID, site.Name, site.RemotePrefix, site.LocalPath, site.VersionFile).Scan(&siteID)
+	`, bucketID, site.Name, site.RemotePrefix, site.LocalPath, site.VersionFile, site.BuildCommand, site.BuildWorkdir, boolToInt(site.BuildBeforeSync)).Scan(&siteID)
 	if err != nil {
 		return 0, fmt.Errorf("保存网站：%w", err)
 	}
@@ -89,15 +98,18 @@ func (db *DB) SaveSiteForBucket(ctx context.Context, accountID int64, bucketName
 	}
 	var siteID int64
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO sites(bucket_id, name, remote_prefix, local_path, version_file)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO sites(bucket_id, name, remote_prefix, local_path, version_file, build_command, build_workdir, build_before_sync)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(bucket_id, name) DO UPDATE SET
 			remote_prefix = excluded.remote_prefix,
 			local_path = excluded.local_path,
 			version_file = excluded.version_file,
+			build_command = excluded.build_command,
+			build_workdir = excluded.build_workdir,
+			build_before_sync = excluded.build_before_sync,
 			updated_at = CURRENT_TIMESTAMP
 		RETURNING id
-	`, bucketID, site.Name, site.RemotePrefix, site.LocalPath, site.VersionFile).Scan(&siteID)
+	`, bucketID, site.Name, site.RemotePrefix, site.LocalPath, site.VersionFile, site.BuildCommand, site.BuildWorkdir, boolToInt(site.BuildBeforeSync)).Scan(&siteID)
 	if err != nil {
 		return 0, fmt.Errorf("保存路径映射：%w", err)
 	}
@@ -106,7 +118,7 @@ func (db *DB) SaveSiteForBucket(ctx context.Context, accountID int64, bucketName
 
 func (db *DB) ListSites(ctx context.Context, accountID int64) ([]Site, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file
+		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file, s.build_command, s.build_workdir, s.build_before_sync
 		FROM sites s
 		JOIN buckets b ON b.id = s.bucket_id
 		WHERE b.account_id = ?
@@ -120,9 +132,11 @@ func (db *DB) ListSites(ctx context.Context, accountID int64) ([]Site, error) {
 	sites := make([]Site, 0)
 	for rows.Next() {
 		var site Site
-		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile); err != nil {
+		var buildBeforeSync int
+		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile, &site.BuildCommand, &site.BuildWorkdir, &buildBeforeSync); err != nil {
 			return nil, fmt.Errorf("解析网站：%w", err)
 		}
+		site.BuildBeforeSync = buildBeforeSync == 1
 		sites = append(sites, site)
 	}
 	if err := rows.Err(); err != nil {
@@ -133,7 +147,7 @@ func (db *DB) ListSites(ctx context.Context, accountID int64) ([]Site, error) {
 
 func (db *DB) ListSitesForBucket(ctx context.Context, accountID int64, bucketName string) ([]Site, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file
+		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file, s.build_command, s.build_workdir, s.build_before_sync
 		FROM sites s
 		JOIN buckets b ON b.id = s.bucket_id
 		WHERE b.account_id = ? AND b.name = ?
@@ -146,9 +160,11 @@ func (db *DB) ListSitesForBucket(ctx context.Context, accountID int64, bucketNam
 	result := make([]Site, 0)
 	for rows.Next() {
 		var site Site
-		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile); err != nil {
+		var buildBeforeSync int
+		if err := rows.Scan(&site.ID, &site.AccountID, &site.BucketID, &site.Name, &site.RemotePrefix, &site.LocalPath, &site.VersionFile, &site.BuildCommand, &site.BuildWorkdir, &buildBeforeSync); err != nil {
 			return nil, fmt.Errorf("解析路径映射：%w", err)
 		}
+		site.BuildBeforeSync = buildBeforeSync == 1
 		result = append(result, site)
 	}
 	return result, rows.Err()
@@ -170,11 +186,15 @@ func (db *DB) DeleteSite(ctx context.Context, siteID int64) error {
 }
 
 func (db *DB) UpdateSite(ctx context.Context, siteID int64, name, localPath, remotePrefix string) error {
+	return db.UpdateSiteWithBuild(ctx, siteID, name, localPath, remotePrefix, "", "")
+}
+
+func (db *DB) UpdateSiteWithBuild(ctx context.Context, siteID int64, name, localPath, remotePrefix, buildCommand, buildWorkdir string) error {
 	result, err := db.ExecContext(ctx, `
 		UPDATE sites
-		SET name = ?, local_path = ?, remote_prefix = ?, updated_at = CURRENT_TIMESTAMP
+		SET name = ?, local_path = ?, remote_prefix = ?, build_command = ?, build_workdir = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-	`, name, localPath, remotePrefix, siteID)
+	`, name, localPath, remotePrefix, buildCommand, buildWorkdir, siteID)
 	if err != nil {
 		return fmt.Errorf("更新路径映射：%w", err)
 	}
@@ -190,8 +210,9 @@ func (db *DB) UpdateSite(ctx context.Context, siteID int64, name, localPath, rem
 
 func (db *DB) GetSite(ctx context.Context, siteID int64) (Site, error) {
 	var site Site
+	var buildBeforeSync int
 	err := db.QueryRowContext(ctx, `
-		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file
+		SELECT s.id, b.account_id, s.bucket_id, s.name, s.remote_prefix, s.local_path, s.version_file, s.build_command, s.build_workdir, s.build_before_sync
 		FROM sites s
 		JOIN buckets b ON b.id = s.bucket_id
 		WHERE s.id = ?
@@ -203,9 +224,32 @@ func (db *DB) GetSite(ctx context.Context, siteID int64) (Site, error) {
 		&site.RemotePrefix,
 		&site.LocalPath,
 		&site.VersionFile,
+		&site.BuildCommand,
+		&site.BuildWorkdir,
+		&buildBeforeSync,
 	)
 	if err != nil {
 		return Site{}, fmt.Errorf("读取网站：%w", err)
 	}
+	site.BuildBeforeSync = buildBeforeSync == 1
 	return site, nil
+}
+
+func (db *DB) UpdateBuildBeforeSync(ctx context.Context, siteID int64, enabled bool) error {
+	result, err := db.ExecContext(ctx, `
+		UPDATE sites
+		SET build_before_sync = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`, boolToInt(enabled), siteID)
+	if err != nil {
+		return fmt.Errorf("保存同步前构建设置：%w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf("路径映射不存在")
+	}
+	return nil
 }

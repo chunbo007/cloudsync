@@ -6,6 +6,8 @@ import {qiniu} from '../models';
 import {database} from '../models';
 import {syncer} from '../models';
 
+export function BuildMapping(arg1:number):Promise<void>;
+
 export function CheckForUpdate():Promise<updater.Result>;
 
 export function ChooseDirectory():Promise<string>;
@@ -33,6 +35,8 @@ export function OpenLocalDirectory(arg1:string):Promise<void>;
 export function SaveAccount(arg1:main.AccountInput):Promise<number>;
 
 export function SaveBucketSelections(arg1:number,arg2:Array<main.BucketSelection>):Promise<void>;
+
+export function SaveBuildBeforeSync(arg1:number,arg2:boolean):Promise<void>;
 
 export function SaveMapping(arg1:number,arg2:string,arg3:main.MappingInput):Promise<void>;
 
